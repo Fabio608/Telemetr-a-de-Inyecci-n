@@ -8,7 +8,6 @@ from streamlit_folium import st_folium
 st.set_page_config(page_title="Vigía Diesel Pro", layout="wide", initial_sidebar_state="expanded")
 
 # 2. GENERACIÓN DE DATOS SIMULADOS 
-# (En producción, estos datos vendrán del módulo de telemetría y tu análisis GIS)
 def generar_datos_simulados():
     tiempo = pd.date_range(start="2026-05-25", periods=50, freq="1min")
     
@@ -21,7 +20,86 @@ def generar_datos_simulados():
     inj_3 = np.random.normal(1, 0.3, 50)
     inj_4 = np.random.normal(1, 0.1, 50)
     
+    # Aquí es donde se generaba el error si se cortaba el texto:
     df = pd.DataFrame({
         "Elevación (m)": elevacion,
         "Inyector 1 (%)": inj_1,
         "Inyector 2 (%)": inj_2,
+        "Inyector 3 (%)": inj_3,
+        "Inyector 4 (%)": inj_4
+    }, index=tiempo)
+    return df
+
+datos_telemetria = generar_datos_simulados()
+
+# 3. PANEL LATERAL (BARRA DE CONTROL BOMBISTA)
+with st.sidebar:
+    st.title("Vigía Diesel Pro")
+    st.markdown("---")
+    st.subheader("Flota Activa")
+    
+    camion_seleccionado = st.selectbox(
+        "Seleccionar Unidad en Ruta:",
+        ["Scania R450 - Dominio ABC123", "Volvo FH540 - Dominio DEF456", "Mack Anthem - Dominio GHI789"]
+    )
+    
+    st.markdown("---")
+    st.subheader("Estado General")
+    st.error("🔴 ALERTA: Compensación Alta en Subida")
+    st.write("**Unidad:**", camion_seleccionado)
+    st.write("**Ubicación:** Ruta 3, km 1830")
+    st.write("**Velocidad:** 65 km/h")
+    
+    st.markdown("---")
+    st.button("Generar Informe PDF")
+
+# 4. ÁREA PRINCIPAL (MAPA Y GRÁFICOS)
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    st.subheader("📍 Mapeo Satelital de Estrés Mecánico")
+    
+    # Mapa centrado en Comodoro Rivadavia
+    m = folium.Map(location=[-45.8641, -67.4965], zoom_start=11, tiles=None)
+    
+    # Agregamos la capa Satelital Híbrida de Google Maps
+    folium.TileLayer(
+        tiles='http://mt0.google.com/vt/lyrs=y&hl=es&x={x}&y={y}&z={z}',
+        attr='Google Maps',
+        name='Google Satellite',
+        max_zoom=20
+    ).add_to(m)
+    
+    # Dibujamos una línea de ruta simulada
+    ruta_coords = [
+        [-45.8641, -67.4965], [-45.8500, -67.5100], [-45.8300, -67.5300], 
+        [-45.8100, -67.5400], [-45.7900, -67.5500]
+    ]
+    folium.PolyLine(ruta_coords, color="#00FF00", weight=5, opacity=0.8).add_to(m)
+    
+    # Marcador rojo simulando el camión en el punto de falla
+    folium.CircleMarker(
+        location=[-45.7900, -67.5500],
+        radius=8,
+        color="red",
+        fill=True,
+        fill_color="red",
+        popup="Inyector 2 - Alerta de Compensación"
+    ).add_to(m)
+    
+    # Mostrar el mapa en Streamlit
+    st_folium(m, width=800, height=450)
+
+with col2:
+    st.subheader("⚙️ Diagnóstico de Inyección")
+    st.write("Caudal de compensación (%)")
+    
+    # Gráficos de los inyectores
+    st.line_chart(datos_telemetria[["Inyector 1 (%)", "Inyector 2 (%)", "Inyector 3 (%)", "Inyector 4 (%)"]], height=200)
+    
+    st.markdown("---")
+    st.subheader("⛰️ Perfil de Elevación (DEM)")
+    st.write("Altitud sobre el nivel del mar (m)")
+    
+    # Gráfico del relieve 
+    st.area_chart(datos_telemetria["Elevación (m)"], color="#FFA500", height=150)
